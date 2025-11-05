@@ -109,7 +109,7 @@ jobs:
         echo "   vCores: ${{ inputs.vcores }}"
         
         # Build and Deploy to CloudHub 2.0
-        mvn clean package mule:deploy \
+        mvn clean package org.mule.tools.maven:mule-maven-plugin:4.4.0:deploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
           -DgrantType="$GRANT_TYPE" \
