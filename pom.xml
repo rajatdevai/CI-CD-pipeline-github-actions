@@ -13,17 +13,21 @@
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-		<app.runtime>4.9.8</app.runtime>
-		<mule.maven.plugin.version>4.4.0</mule.maven.plugin.version>
+		<!-- CHANGE 1: Using variable instead of hardcoded version -->
+		<app.runtime>${mule.version}</app.runtime>
+		<mule.maven.plugin.version>4.5.0</mule.maven.plugin.version>
 		
-		<!-- CloudHub 2.0 Deployment Properties -->
-		<ch2.application.name>test-ci-cd-deployment</ch2.application.name>
-		<ch2.environment>Sandbox</ch2.environment>
-		<ch2.target>Cloudhub-US-East-2</ch2.target>
-		<ch2.provider>MC</ch2.provider>
-		<ch2.replicas>1</ch2.replicas>
-		<ch2.vCores>0.1</ch2.vCores>
-		<ch2.businessGroupId>c0b139e1-50e3-440a-af61-f78695141ed5</ch2.businessGroupId>
+		<!-- CHANGE 2: CloudHub 2.0 Deployment Properties using variables from CI/CD -->
+		<env>Sandbox</env>
+		<region>Cloudhub-US-East-2</region>
+		<runtime>4.9.8</runtime>
+		<appName>test-ci-cd-deployment-sandbox</appName>
+		<replica>1</replica>
+		<vCores>0.1</vCores>
+		
+		<!-- CHANGE 3: ConnectedApp credentials as direct placeholders (will be overridden by -D flags) -->
+		<connectedAppId>placeholder</connectedAppId>
+		<connectedAppSecret>placeholder</connectedAppSecret>
 	</properties>
 
 	<build>
@@ -33,6 +37,8 @@
 				<artifactId>maven-clean-plugin</artifactId>
 				<version>3.2.0</version>
 			</plugin>
+			
+			<!-- CHANGE 4: Updated mule-maven-plugin with ConnectedApp authentication -->
 			<plugin>
 				<groupId>org.mule.tools.maven</groupId>
 				<artifactId>mule-maven-plugin</artifactId>
@@ -41,23 +47,19 @@
 				<configuration>
 					<cloudhub2Deployment>
 						<uri>https://anypoint.mulesoft.com</uri>
-						<muleVersion>${app.runtime}</muleVersion>
-						<applicationName>${ch2.application.name}</applicationName>
-						<environment>${ch2.environment}</environment>
-						<target>${ch2.target}</target>
-						<provider>${ch2.provider}</provider>
-						<replicas>${ch2.replicas}</replicas>
-						<vCores>${ch2.vCores}</vCores>
-						<businessGroupId>${ch2.businessGroupId}</businessGroupId>
+						<provider>MC</provider>
+						<!-- CHANGE 5: Using variables instead of hardcoded values -->
+						<environment>${env}</environment>
+						<target>${region}</target>
+						<muleVersion>${runtime}</muleVersion>
+						<applicationName>${appName}</applicationName>
+						<replicas>${replica}</replicas>
+						<vCores>${vCores}</vCores>
+						
+						<!-- CHANGE 6: ConnectedApp authentication (new) - directly references properties -->
 						<connectedAppClientId>${connectedAppId}</connectedAppClientId>
 						<connectedAppClientSecret>${connectedAppSecret}</connectedAppClientSecret>
-						<connectedAppGrantType>${grantType}</connectedAppGrantType>
-					
-						<properties>
-							<http.port>8081</http.port>
-							<anypoint.platform.client_id>${connectedAppId}</anypoint.platform.client_id>
-							<anypoint.platform.client_secret>${connectedAppSecret}</anypoint.platform.client_secret>
-						</properties>
+						<connectedAppGrantType>client_credentials</connectedAppGrantType>
 					</cloudhub2Deployment>
 				</configuration>
 			</plugin>
@@ -105,7 +107,8 @@
 			</snapshots>
 		</pluginRepository>
 	</pluginRepositories>
-		<distributionManagement>
+
+	<distributionManagement>
 		<repository>
 			<id>anypoint-exchange-v3</id>
 			<name>Anypoint Exchange</name>
