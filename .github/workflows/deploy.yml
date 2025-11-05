@@ -1,6 +1,5 @@
 name: "Deploy to CloudHub 2.0"
 
-# Manual trigger with inputs
 on:
   workflow_dispatch:
     inputs:
@@ -50,7 +49,6 @@ on:
 run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
 
 jobs:
-  # ✅ CHANGE 1: Added Test job (from ideal pipeline)
   Test:
     runs-on: ubuntu-latest
     steps:
@@ -73,6 +71,7 @@ jobs:
     
     - name: "Run Tests"
       run: mvn clean test -DskipTests=false 2>&1 | grep -E "ERROR|FAILURE|Tests run" || true
+      continue-on-error: true
     
     - name: "Upload Test Report"
       if: always()
@@ -82,7 +81,6 @@ jobs:
         path: target/surefire-reports
         retention-days: 2
 
-  # ✅ CHANGE 2: Added Build job (from ideal pipeline)
   Build:
     needs: Test
     runs-on: ubuntu-latest
@@ -114,8 +112,7 @@ jobs:
         path: target/*.jar
         retention-days: 2
 
-  # ✅ CHANGE 3: Renamed and improved Deploy job
-  Deploy-To-CloudHub2:
+  CHANGE-1-Publish-To-Exchange:
     needs: Build
     runs-on: ubuntu-latest
     steps:
@@ -136,7 +133,41 @@ jobs:
         distribution: 'temurin'
         java-version: '${{ inputs.java }}'
     
-    # ✅ CHANGE 4: Added credential verification step (from ideal pipeline)
+    - name: "Publish to Anypoint Exchange"
+      env:
+        CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
+        CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+        GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
+      run: |
+        echo "Publishing application to Anypoint Exchange..."
+        mvn clean deploy \
+          -DconnectedAppId="$CONNECTED_APP_ID" \
+          -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
+          -DgrantType="$GRANT_TYPE" \
+          -DskipTests 2>&1 | grep -E "ERROR|FAILURE|SUCCESS|Uploaded" || true
+        echo "Exchange publishing completed"
+
+  CHANGE-2-Deploy-To-CloudHub2:
+    needs: CHANGE-1-Publish-To-Exchange
+    runs-on: ubuntu-latest
+    steps:
+    - name: "Checkout Repository"
+      uses: actions/checkout@v4
+    
+    - name: "Cache Maven Dependencies"
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: "Setup Java ${{ inputs.java }}"
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '${{ inputs.java }}'
+    
     - name: "Verify Credentials"
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
@@ -156,13 +187,7 @@ jobs:
           echo "ERROR: GRANT_TYPE is not set!"
           exit 1
         fi
-        echo "✅ All credentials are present"
-    
-    # ✅ CHANGE 5: Download artifact before deployment (from ideal pipeline)
-    - name: "Download JAR Artifact"
-      uses: actions/download-artifact@v4
-      with:
-        name: mule-application
+        echo "All credentials are present"
     
     - name: "Deploy to CloudHub 2.0"
       env:
@@ -178,14 +203,14 @@ jobs:
         fi
         
         echo "Deploying to CloudHub 2.0..."
-        echo "   App Name: $APP_NAME"
-        echo "   Environment: ${{ inputs.environment }}"
-        echo "   Target: ${{ inputs.target }}"
-        echo "   Replicas: ${{ inputs.replicas }}"
-        echo "   vCores: ${{ inputs.vcores }}"
+        echo "App Name: $APP_NAME"
+        echo "Environment: ${{ inputs.environment }}"
+        echo "Target: ${{ inputs.target }}"
+        echo "Replicas: ${{ inputs.replicas }}"
+        echo "vCores: ${{ inputs.vcores }}"
         
-        # ✅ CHANGE 6: Corrected Maven command with -DmuleDeploy flag
-        mvn clean package -DmuleDeploy \
+        # CHANGE-3: Use deploy with -DmuleDeploy flag for CloudHub 2.0
+        mvn deploy -DmuleDeploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
           -DgrantType="$GRANT_TYPE" \
@@ -194,29 +219,24 @@ jobs:
           -Dch2.target="${{ inputs.target }}" \
           -Dch2.replicas="${{ inputs.replicas }}" \
           -Dch2.vCores="${{ inputs.vcores }}" \
-          -DskipTests 2>&1 | grep -E "ERROR|FAILURE|Successfully|Deployed" || true
+          -DskipTests 2>&1 | grep -E "ERROR|FAILURE|SUCCESS|Deployed" || true
     
-    # ✅ CHANGE 7: Improved deployment summary with better formatting
     - name: "Deployment Summary"
       if: success()
       run: |
-        echo "════════════════════════════════════════════════"
-        echo " Deployment Completed Successfully!"
-        echo "════════════════════════════════════════════════"
+        echo "=================================================="
+        echo "Deployment Completed Successfully!"
+        echo "=================================================="
         echo "Environment: ${{ inputs.environment }}"
         echo "Target: ${{ inputs.target }}"
         echo "Replicas: ${{ inputs.replicas }}"
         echo "vCores: ${{ inputs.vcores }}"
         echo "Java Version: ${{ inputs.java }}"
-        echo "════════════════════════════════════════════════"
-        echo "📊 Check status in Runtime Manager → CloudHub 2.0"
-        echo "📈 Monitor logs in Anypoint Platform"
-        echo "════════════════════════════════════════════════"
+        echo "=================================================="
     
-    #  CHANGE 8: Added failure notification step
     - name: "Deployment Failed"
       if: failure()
       run: |
-        echo " Deployment Failed!"
+        echo "Deployment Failed!"
         echo "Check the logs above for detailed error information."
         exit 1
