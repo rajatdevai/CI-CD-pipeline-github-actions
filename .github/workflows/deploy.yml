@@ -112,7 +112,7 @@ jobs:
         path: target/*.jar
         retention-days: 2
 
-  CHANGE-1-Publish-To-Exchange:
+  Publish-To-Exchange:
     needs: Build
     runs-on: ubuntu-latest
     steps:
@@ -140,19 +140,17 @@ jobs:
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
-        GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
       run: |
         echo "Publishing application to Anypoint Exchange..."
         mvn deploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
-          -DgrantType="$GRANT_TYPE" \
           -DskipTests -q
         echo "Exchange publishing completed"
-      continue-on-error: false
+      continue-on-error: true
 
-  CHANGE-2-Deploy-To-CloudHub2:
-    needs: CHANGE-1-Publish-To-Exchange
+  Deploy-To-CloudHub2:
+    needs: Publish-To-Exchange
     runs-on: ubuntu-latest
     steps:
     - name: "Checkout Repository"
@@ -176,7 +174,6 @@ jobs:
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
-        GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
       run: |
         echo "Verifying credentials..."
         if [ -z "$CONNECTED_APP_ID" ]; then
@@ -187,17 +184,12 @@ jobs:
           echo "ERROR: CONNECTED_APP_SECRET is not set!"
           exit 1
         fi
-        if [ -z "$GRANT_TYPE" ]; then
-          echo "ERROR: GRANT_TYPE is not set!"
-          exit 1
-        fi
         echo "All credentials are present"
     
     - name: "Deploy to CloudHub 2.0"
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
-        GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
       run: |
         # Set application name based on environment
         if [ "${{ inputs.environment }}" == "Sandbox" ]; then
@@ -213,16 +205,16 @@ jobs:
         echo "Replicas: ${{ inputs.replicas }}"
         echo "vCores: ${{ inputs.vcores }}"
         
-        # CHANGE-3: Build and deploy directly to CloudHub 2.0
+        # CHANGE: Updated to use new POM variable names
         mvn clean package -DmuleDeploy \
+          -Denv="${{ inputs.environment }}" \
+          -Dregion="${{ inputs.target }}" \
+          -Druntime="4.9.8" \
+          -DappName="$APP_NAME" \
+          -Dreplica="${{ inputs.replicas }}" \
+          -DvCores="${{ inputs.vcores }}" \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
-          -DgrantType="$GRANT_TYPE" \
-          -Dch2.application.name="$APP_NAME" \
-          -Dch2.environment="${{ inputs.environment }}" \
-          -Dch2.target="${{ inputs.target }}" \
-          -Dch2.replicas="${{ inputs.replicas }}" \
-          -Dch2.vCores="${{ inputs.vcores }}" \
           -DskipTests -q
     
     - name: "Deployment Summary"
