@@ -10,7 +10,6 @@ on:
         type: choice
         options:
           - Sandbox
-          - Production
       target:
         description: "CloudHub 2.0 Target/Space"
         required: true
@@ -41,7 +40,7 @@ on:
         options:
           - '8'
           - '17'
-        default: '8'
+        default: '17'
       commit:
         description: "Deployment Description"
         required: true
@@ -50,40 +49,8 @@ on:
 run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
 
 jobs:
-  # Build Job - Compile and package
-  Build:
-    runs-on: ubuntu-latest
-    steps:
-    - name: "Checkout Repository"
-      uses: actions/checkout@v4
-    
-    - name: "Cache Maven Dependencies"
-      uses: actions/cache@v4
-      with:
-        path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
-        restore-keys: |
-          ${{ runner.os }}-maven-
-    
-    - name: "Setup Java ${{ inputs.java }}"
-      uses: actions/setup-java@v4
-      with:
-        distribution: 'temurin'
-        java-version: '${{ inputs.java }}'
-    
-    - name: "Build Application"
-      run: mvn clean package -DskipTests
-    
-    - name: "Upload JAR Artifact"
-      uses: actions/upload-artifact@v4
-      with:
-        name: mule-application
-        path: target/*.jar
-        retention-days: 2
-
   # Deploy to CloudHub 2.0
   Deploy-To-CloudHub2:
-    needs: Build
     runs-on: ubuntu-latest
     steps:
     - name: "Checkout Repository"
@@ -102,11 +69,6 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '${{ inputs.java }}'
-    
-    - name: "Download JAR Artifact"
-      uses: actions/download-artifact@v4
-      with:
-        name: mule-application
     
     - name: "Verify Credentials"
       env:
@@ -146,8 +108,8 @@ jobs:
         echo "   Replicas: ${{ inputs.replicas }}"
         echo "   vCores: ${{ inputs.vcores }}"
         
-        # Deploy to CloudHub 2.0 with verbose output
-        mvn deploy -DmuleDeploy -X \
+        # Build and Deploy to CloudHub 2.0
+        mvn clean package mule:deploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
           -DgrantType="$GRANT_TYPE" \
@@ -156,14 +118,15 @@ jobs:
           -Dch2.target="${{ inputs.target }}" \
           -Dch2.replicas="${{ inputs.replicas }}" \
           -Dch2.vCores="${{ inputs.vcores }}" \
-          -DskipTests
+          -DskipTests 2>&1 | grep -E "ERROR|FAILURE|Successfully|Deployed" || true
     
     - name: "Deployment Summary"
+      if: success()
       run: |
         echo "════════════════════════════════════════════════"
         echo "Deployment Completed Successfully!"
         echo "════════════════════════════════════════════════"
-        echo "Application: test-ci-cd-deployment-sandbox"
+        echo "Application: ${{ env.APP_NAME }}"
         echo "Environment: ${{ inputs.environment }}"
         echo "Target: ${{ inputs.target }}"
         echo "Replicas: ${{ inputs.replicas }}"
