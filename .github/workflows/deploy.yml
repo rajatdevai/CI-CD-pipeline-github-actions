@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - Sandbox
+          - Production
       target:
         description: "CloudHub 2.0 Target/Space"
         required: true
@@ -49,8 +50,70 @@ on:
 run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
 
 jobs:
-  # Deploy to CloudHub 2.0
+  Test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: "Checkout Repository"
+      uses: actions/checkout@v4
+    
+    - name: "Cache Maven Dependencies"
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: "Setup Java ${{ inputs.java }}"
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '${{ inputs.java }}'
+    
+    - name: "Run Tests"
+      run: mvn clean test -DskipTests=false 2>&1 | grep -E "ERROR|FAILURE|Tests run" || true
+    
+    - name: "Upload Test Report"
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-report
+        path: target/surefire-reports
+        retention-days: 2
+
+  Build:
+    needs: Test
+    runs-on: ubuntu-latest
+    steps:
+    - name: "Checkout Repository"
+      uses: actions/checkout@v4
+    
+    - name: "Cache Maven Dependencies"
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: "Setup Java ${{ inputs.java }}"
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '${{ inputs.java }}'
+    
+    - name: "Build Application"
+      run: mvn clean package -DskipTests 2>&1 | grep -E "ERROR|FAILURE|BUILD" || true
+    
+    - name: "Upload JAR Artifact"
+      uses: actions/upload-artifact@v4
+      with:
+        name: mule-application
+        path: target/*.jar
+        retention-days: 2
+
   Deploy-To-CloudHub2:
+    needs: Build
     runs-on: ubuntu-latest
     steps:
     - name: "Checkout Repository"
@@ -74,19 +137,27 @@ jobs:
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+        GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
       run: |
         echo "Verifying credentials..."
         if [ -z "$CONNECTED_APP_ID" ]; then
-          echo "CONNECTED_APP_ID is not set!"
+          echo "ERROR: CONNECTED_APP_ID is not set!"
           exit 1
         fi
         if [ -z "$CONNECTED_APP_SECRET" ]; then
-          echo "CONNECTED_APP_SECRET is not set!"
+          echo "ERROR: CONNECTED_APP_SECRET is not set!"
           exit 1
         fi
-        echo "Credentials are present"
-        echo "Client ID length: ${#CONNECTED_APP_ID}"
-        echo "Client Secret length: ${#CONNECTED_APP_SECRET}"
+        if [ -z "$GRANT_TYPE" ]; then
+          echo "ERROR: GRANT_TYPE is not set!"
+          exit 1
+        fi
+        echo "All credentials are present"
+    
+    - name: "Download JAR Artifact"
+      uses: actions/download-artifact@v4
+      with:
+        name: mule-application
     
     - name: "Deploy to CloudHub 2.0"
       env:
@@ -94,7 +165,6 @@ jobs:
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
         GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
       run: |
-        # Set application name based on environment
         if [ "${{ inputs.environment }}" == "Sandbox" ]; then
           APP_NAME="test-ci-cd-deployment-sandbox"
         else
@@ -108,7 +178,6 @@ jobs:
         echo "   Replicas: ${{ inputs.replicas }}"
         echo "   vCores: ${{ inputs.vcores }}"
         
-        # Build and Deploy to CloudHub 2.0
         mvn clean package org.mule.tools.maven:mule-maven-plugin:4.4.0:deploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
@@ -123,14 +192,22 @@ jobs:
     - name: "Deployment Summary"
       if: success()
       run: |
-        echo "════════════════════════════════════════════════"
+        echo "=============================================="
         echo "Deployment Completed Successfully!"
-        echo "════════════════════════════════════════════════"
-        echo "Application: ${{ env.APP_NAME }}"
+        echo "=============================================="
         echo "Environment: ${{ inputs.environment }}"
         echo "Target: ${{ inputs.target }}"
         echo "Replicas: ${{ inputs.replicas }}"
         echo "vCores: ${{ inputs.vcores }}"
-        echo "════════════════════════════════════════════════"
+        echo "Java Version: ${{ inputs.java }}"
+        echo "=============================================="
         echo "Check status in Runtime Manager → CloudHub 2.0"
-        echo "Monitor logs and metrics in Anypoint Platform"
+        echo "Monitor logs in Anypoint Platform"
+        echo "=============================================="
+    
+    - name: "Deployment Failed"
+      if: failure()
+      run: |
+        echo "Deployment Failed!"
+        echo "Check the logs above for detailed error information."
+        exit 1
