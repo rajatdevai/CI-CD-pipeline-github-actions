@@ -48,17 +48,11 @@
 						<provider>${ch2.provider}</provider>
 						<replicas>${ch2.replicas}</replicas>
 						<vCores>${ch2.vCores}</vCores>
-						<businessGroup>${ch2.businessGroup}</businessGroup>
+						<businessGroupId>${ch2.businessGroupId}</businessGroupId>
 						<connectedAppClientId>${connectedAppId}</connectedAppClientId>
 						<connectedAppClientSecret>${connectedAppSecret}</connectedAppClientSecret>
 						<connectedAppGrantType>${grantType}</connectedAppGrantType>
-						<deploymentSettings>
-							<http>
-								<inbound>
-									<publicUrl>${ch2.application.name}.${ch2.target}.anypointdns.net</publicUrl>
-								</inbound>
-							</http>
-						</deploymentSettings>
+					
 						<properties>
 							<http.port>8081</http.port>
 							<anypoint.platform.client_id>${connectedAppId}</anypoint.platform.client_id>
