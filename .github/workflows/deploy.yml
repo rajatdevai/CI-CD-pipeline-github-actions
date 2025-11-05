@@ -1,0 +1,155 @@
+name: "Deploy to CloudHub 2.0"
+
+# Manual trigger with inputs
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment Environment"
+        required: true
+        type: choice
+        options:
+          - Sandbox
+          - Production
+      target:
+        description: "CloudHub 2.0 Target/Space"
+        required: true
+        type: string
+        default: "cloudhub-2"
+      replicas:
+        description: "Number of Replicas"
+        required: true
+        type: choice
+        options:
+          - '1'
+          - '2'
+        default: '1'
+      vcores:
+        description: "vCores per Replica"
+        required: true
+        type: choice
+        options:
+          - '0.1'
+          - '0.2'
+          - '1'
+          - '2'
+        default: '0.1'
+      java:
+        description: "Java Version"
+        required: true
+        type: choice
+        options:
+          - '8'
+          - '17'
+        default: '8'
+      commit:
+        description: "Deployment Description"
+        required: true
+        type: string
+
+run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
+
+jobs:
+  # Build Job - Compile and package
+  Build:
+    runs-on: ubuntu-latest
+    steps:
+    - name: "📥 Checkout Repository"
+      uses: actions/checkout@v4
+    
+    - name: "💾 Cache Maven Dependencies"
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: "☕ Setup Java ${{ inputs.java }}"
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '${{ inputs.java }}'
+    
+    - name: "🔨 Build Application"
+      run: mvn clean package -DskipTests
+    
+    - name: "📦 Upload JAR Artifact"
+      uses: actions/upload-artifact@v4
+      with:
+        name: mule-application
+        path: target/*.jar
+        retention-days: 2
+
+  # Deploy to CloudHub 2.0
+  Deploy-To-CloudHub2:
+    needs: Build
+    runs-on: ubuntu-latest
+    steps:
+    - name: "📥 Checkout Repository"
+      uses: actions/checkout@v4
+    
+    - name: "💾 Cache Maven Dependencies"
+      uses: actions/cache@v4
+      with:
+        path: ~/.m2/repository
+        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        restore-keys: |
+          ${{ runner.os }}-maven-
+    
+    - name: "☕ Setup Java ${{ inputs.java }}"
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '${{ inputs.java }}'
+    
+    - name: "📥 Download JAR Artifact"
+      uses: actions/download-artifact@v4
+      with:
+        name: mule-application
+    
+    - name: "🚀 Deploy to CloudHub 2.0"
+      env:
+        CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
+        CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+        GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
+      run: |
+        # Set application name based on environment
+        if [ "${{ inputs.environment }}" == "Sandbox" ]; then
+          APP_NAME="test-ci-cd-deployment-sandbox"
+        else
+          APP_NAME="test-ci-cd-deployment-prod"
+        fi
+        
+        echo "🎯 Deploying to CloudHub 2.0..."
+        echo "   App Name: $APP_NAME"
+        echo "   Environment: ${{ inputs.environment }}"
+        echo "   Target: ${{ inputs.target }}"
+        echo "   Replicas: ${{ inputs.replicas }}"
+        echo "   vCores: ${{ inputs.vcores }}"
+        
+        # Deploy to CloudHub 2.0
+        mvn deploy -DmuleDeploy \
+          -DconnectedAppId="$CONNECTED_APP_ID" \
+          -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
+          -DgrantType="$GRANT_TYPE" \
+          -Dch2.application.name="$APP_NAME" \
+          -Dch2.environment="${{ inputs.environment }}" \
+          -Dch2.target="${{ inputs.target }}" \
+          -Dch2.replicas="${{ inputs.replicas }}" \
+          -Dch2.vCores="${{ inputs.vcores }}" \
+          -DskipTests
+    
+    - name: "✅ Deployment Summary"
+      run: |
+        echo "════════════════════════════════════════════════"
+        echo "✅ Deployment Completed Successfully!"
+        echo "════════════════════════════════════════════════"
+        echo "📱 Application: test-ci-cd-deployment-sandbox"
+        echo "🌍 Environment: ${{ inputs.environment }}"
+        echo "🎯 Target: ${{ inputs.target }}"
+        echo "💻 Replicas: ${{ inputs.replicas }}"
+        echo "⚡ vCores: ${{ inputs.vcores }}"
+        echo "════════════════════════════════════════════════"
+        echo "🔗 Check status in Runtime Manager → CloudHub 2.0"
+        echo "📊 Monitor logs and metrics in Anypoint Platform"

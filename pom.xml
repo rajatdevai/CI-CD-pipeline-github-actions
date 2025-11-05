@@ -14,7 +14,16 @@
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
 		<app.runtime>4.9.8</app.runtime>
-		<mule.maven.plugin.version>4.3.0</mule.maven.plugin.version>
+		<mule.maven.plugin.version>4.4.0</mule.maven.plugin.version>
+		
+		<!-- CloudHub 2.0 Deployment Properties -->
+		<ch2.application.name>test-ci-cd-deployment</ch2.application.name>
+		<ch2.environment>Sandbox</ch2.environment>
+		<ch2.target>Cloudhub-US-East-2</ch2.target>
+		<ch2.provider>MC</ch2.provider>
+		<ch2.replicas>1</ch2.replicas>
+		<ch2.vCores>0.1</ch2.vCores>
+		<ch2.businessGroup></ch2.businessGroup>
 	</properties>
 
 	<build>
@@ -29,6 +38,34 @@
 				<artifactId>mule-maven-plugin</artifactId>
 				<version>${mule.maven.plugin.version}</version>
 				<extensions>true</extensions>
+				<configuration>
+					<cloudhub2Deployment>
+						<uri>https://anypoint.mulesoft.com</uri>
+						<muleVersion>${app.runtime}</muleVersion>
+						<applicationName>${ch2.application.name}</applicationName>
+						<environment>${ch2.environment}</environment>
+						<target>${ch2.target}</target>
+						<provider>${ch2.provider}</provider>
+						<replicas>${ch2.replicas}</replicas>
+						<vCores>${ch2.vCores}</vCores>
+						<businessGroup>${ch2.businessGroup}</businessGroup>
+						<connectedAppClientId>${connectedAppId}</connectedAppClientId>
+						<connectedAppClientSecret>${connectedAppSecret}</connectedAppClientSecret>
+						<connectedAppGrantType>${grantType}</connectedAppGrantType>
+						<deploymentSettings>
+							<http>
+								<inbound>
+									<publicUrl>${ch2.application.name}.${ch2.target}.anypointdns.net</publicUrl>
+								</inbound>
+							</http>
+						</deploymentSettings>
+						<properties>
+							<http.port>8081</http.port>
+							<anypoint.platform.client_id>${connectedAppId}</anypoint.platform.client_id>
+							<anypoint.platform.client_secret>${connectedAppSecret}</anypoint.platform.client_secret>
+						</properties>
+					</cloudhub2Deployment>
+				</configuration>
 			</plugin>
 		</plugins>
 	</build>
