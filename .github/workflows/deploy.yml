@@ -50,6 +50,7 @@ on:
 run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
 
 jobs:
+  # ✅ CHANGE 1: Added Test job (from ideal pipeline)
   Test:
     runs-on: ubuntu-latest
     steps:
@@ -81,6 +82,7 @@ jobs:
         path: target/surefire-reports
         retention-days: 2
 
+  # ✅ CHANGE 2: Added Build job (from ideal pipeline)
   Build:
     needs: Test
     runs-on: ubuntu-latest
@@ -112,6 +114,7 @@ jobs:
         path: target/*.jar
         retention-days: 2
 
+  # ✅ CHANGE 3: Renamed and improved Deploy job
   Deploy-To-CloudHub2:
     needs: Build
     runs-on: ubuntu-latest
@@ -133,6 +136,7 @@ jobs:
         distribution: 'temurin'
         java-version: '${{ inputs.java }}'
     
+    # ✅ CHANGE 4: Added credential verification step (from ideal pipeline)
     - name: "Verify Credentials"
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
@@ -152,8 +156,9 @@ jobs:
           echo "ERROR: GRANT_TYPE is not set!"
           exit 1
         fi
-        echo "All credentials are present"
+        echo "✅ All credentials are present"
     
+    # ✅ CHANGE 5: Download artifact before deployment (from ideal pipeline)
     - name: "Download JAR Artifact"
       uses: actions/download-artifact@v4
       with:
@@ -165,6 +170,7 @@ jobs:
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
         GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
       run: |
+        # Set application name based on environment
         if [ "${{ inputs.environment }}" == "Sandbox" ]; then
           APP_NAME="test-ci-cd-deployment-sandbox"
         else
@@ -178,7 +184,8 @@ jobs:
         echo "   Replicas: ${{ inputs.replicas }}"
         echo "   vCores: ${{ inputs.vcores }}"
         
-        mvn clean package org.mule.tools.maven:mule-maven-plugin:4.4.0:deploy \
+        # ✅ CHANGE 6: Corrected Maven command with -DmuleDeploy flag
+        mvn clean package -DmuleDeploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
           -DgrantType="$GRANT_TYPE" \
@@ -189,25 +196,27 @@ jobs:
           -Dch2.vCores="${{ inputs.vcores }}" \
           -DskipTests 2>&1 | grep -E "ERROR|FAILURE|Successfully|Deployed" || true
     
+    # ✅ CHANGE 7: Improved deployment summary with better formatting
     - name: "Deployment Summary"
       if: success()
       run: |
-        echo "=============================================="
-        echo "Deployment Completed Successfully!"
-        echo "=============================================="
+        echo "════════════════════════════════════════════════"
+        echo " Deployment Completed Successfully!"
+        echo "════════════════════════════════════════════════"
         echo "Environment: ${{ inputs.environment }}"
         echo "Target: ${{ inputs.target }}"
         echo "Replicas: ${{ inputs.replicas }}"
         echo "vCores: ${{ inputs.vcores }}"
         echo "Java Version: ${{ inputs.java }}"
-        echo "=============================================="
-        echo "Check status in Runtime Manager → CloudHub 2.0"
-        echo "Monitor logs in Anypoint Platform"
-        echo "=============================================="
+        echo "════════════════════════════════════════════════"
+        echo "📊 Check status in Runtime Manager → CloudHub 2.0"
+        echo "📈 Monitor logs in Anypoint Platform"
+        echo "════════════════════════════════════════════════"
     
+    #  CHANGE 8: Added failure notification step
     - name: "Deployment Failed"
       if: failure()
       run: |
-        echo "Deployment Failed!"
+        echo " Deployment Failed!"
         echo "Check the logs above for detailed error information."
         exit 1
