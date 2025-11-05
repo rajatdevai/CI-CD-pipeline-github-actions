@@ -133,6 +133,9 @@ jobs:
         distribution: 'temurin'
         java-version: '${{ inputs.java }}'
     
+    - name: "Build Before Publishing"
+      run: mvn clean package -DskipTests
+    
     - name: "Publish to Anypoint Exchange"
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
@@ -140,12 +143,13 @@ jobs:
         GRANT_TYPE: ${{ secrets.GRANT_TYPE }}
       run: |
         echo "Publishing application to Anypoint Exchange..."
-        mvn clean deploy \
+        mvn deploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
           -DgrantType="$GRANT_TYPE" \
-          -DskipTests 2>&1 | grep -E "ERROR|FAILURE|SUCCESS|Uploaded" || true
+          -DskipTests -q
         echo "Exchange publishing completed"
+      continue-on-error: false
 
   CHANGE-2-Deploy-To-CloudHub2:
     needs: CHANGE-1-Publish-To-Exchange
@@ -209,8 +213,8 @@ jobs:
         echo "Replicas: ${{ inputs.replicas }}"
         echo "vCores: ${{ inputs.vcores }}"
         
-        # CHANGE-3: Use deploy with -DmuleDeploy flag for CloudHub 2.0
-        mvn deploy -DmuleDeploy \
+        # CHANGE-3: Build and deploy directly to CloudHub 2.0
+        mvn clean package -DmuleDeploy \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
           -DgrantType="$GRANT_TYPE" \
@@ -219,7 +223,7 @@ jobs:
           -Dch2.target="${{ inputs.target }}" \
           -Dch2.replicas="${{ inputs.replicas }}" \
           -Dch2.vCores="${{ inputs.vcores }}" \
-          -DskipTests 2>&1 | grep -E "ERROR|FAILURE|SUCCESS|Deployed" || true
+          -DskipTests -q
     
     - name: "Deployment Summary"
       if: success()
