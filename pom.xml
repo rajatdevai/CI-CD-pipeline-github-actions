@@ -8,26 +8,12 @@
 	<packaging>mule-application</packaging>
 
 	<name>test-ci-cd-deployment</name>
-
+    
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-
-		<!-- CHANGE 1: Using variable instead of hardcoded version -->
-		<app.runtime>${mule.version}</app.runtime>
-		<mule.maven.plugin.version>4.5.0</mule.maven.plugin.version>
-		
-		<!-- CHANGE 2: CloudHub 2.0 Deployment Properties using variables from CI/CD -->
-		<env>Sandbox</env>
-		<region>Cloudhub-US-East-2</region>
-		<runtime>4.9.8</runtime>
-		<appName>test-ci-cd-deployment-sandbox</appName>
-		<replica>1</replica>
-		<vCores>0.1</vCores>
-		
-		<!-- CHANGE 3: ConnectedApp credentials as direct placeholders (will be overridden by -D flags) -->
-		<connectedAppId>placeholder</connectedAppId>
-		<connectedAppSecret>placeholder</connectedAppSecret>
+		<app.runtime>4.9.8</app.runtime>
+		<mule.maven.plugin.version>4.4.0</mule.maven.plugin.version>
 	</properties>
 
 	<build>
@@ -49,16 +35,16 @@
 						<uri>https://anypoint.mulesoft.com</uri>
 						<provider>MC</provider>
 						<!-- CHANGE 5: Using variables instead of hardcoded values -->
-						<environment>${env}</environment>
+						<environment>sandbox</environment>
 						<target>${region}</target>
 						<muleVersion>${runtime}</muleVersion>
-						<applicationName>${appName}</applicationName>
+						<applicationName>cc-test-ci/cd-deployment</applicationName>
 						<replicas>${replica}</replicas>
 						<vCores>${vCores}</vCores>
 						
 						<!-- CHANGE 6: ConnectedApp authentication (new) - directly references properties -->
-						<connectedAppClientId>${connectedAppId}</connectedAppClientId>
-						<connectedAppClientSecret>${connectedAppSecret}</connectedAppClientSecret>
+						<connectedAppClientId>${CONNECTED_APP_ID}</connectedAppClientId>
+						<connectedAppClientSecret>${CONNECTED_APP_SECRET}</connectedAppClientSecret>
 						<connectedAppGrantType>client_credentials</connectedAppGrantType>
 					</cloudhub2Deployment>
 				</configuration>
