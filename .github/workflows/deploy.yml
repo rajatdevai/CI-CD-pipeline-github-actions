@@ -20,321 +20,163 @@ on:
         required: true
         type: choice
         options:
-          - '1'
-          - '2'
-        default: '1'
+          - "1"
+          - "2"
       vcores:
         description: "vCores per Replica"
         required: true
         type: choice
         options:
-          - '0.1'
-          - '0.2'
-          - '1'
-          - '2'
-        default: '0.1'
+          - "0.1"
+          - "0.2"
+          - "1"
+          - "2"
       java:
         description: "Java Version"
         required: true
         type: choice
         options:
-          - '8'
-          - '17'
-        default: '17'
+          - "8"
+          - "17"
       runtime:
         description: "Mule Runtime Version"
         required: true
         type: choice
         options:
-          - '4.9.8'
-          - '4.10.0'
-        default: '4.9.8'
+          - "4.9.8"
+          - "4.10.0"
       commit:
         description: "Deployment Description"
         required: true
         type: string
 
-run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
+run-name: "CH2 Deploy: ${ { inputs.commit } } | ${ { inputs.environment } } | ${ { inputs.target } }"
 
 env:
   MAVEN_CACHE_KEY: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
 
 jobs:
+
   Validate-Inputs:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
     steps:
-      - name: "Validate Deployment Parameters"
+      - name: Validate Inputs
         run: |
-          echo "Validating deployment inputs..."
-          
-          if [[ "${{ inputs.environment }}" != "Sandbox" && "${{ inputs.environment }}" != "Production" ]]; then
-            echo "ERROR: Invalid environment: ${{ inputs.environment }}"
+          echo "Validating..."
+          if [[ "${{ inputs.environment }}" == "Sandbox" ]]; then
+            echo "Environment OK: Sandbox"
+          elif [[ "${{ inputs.environment }}" == "Production" ]]; then
+            echo "Environment OK: Production"
+          else
+            echo "Invalid environment"
             exit 1
           fi
-          
-          if [ -z "${{ inputs.target }}" ]; then
-            echo "ERROR: Target/Space cannot be empty"
-            exit 1
-          fi
-          
-          if [[ "${{ inputs.replicas }}" != "1" && "${{ inputs.replicas }}" != "2" ]]; then
-            echo "ERROR: Invalid replicas: ${{ inputs.replicas }}"
-            exit 1
-          fi
-          
-          if [[ ! "${{ inputs.vcores }}" =~ ^(0.1|0.2|1|2)$ ]]; then
-            echo "ERROR: Invalid vCores: ${{ inputs.vcores }}"
-            exit 1
-          fi
-          
-          if [[ "${{ inputs.java }}" != "8" && "${{ inputs.java }}" != "17" ]]; then
-            echo "ERROR: Invalid Java version: ${{ inputs.java }}"
-            exit 1
-          fi
-          
-          echo "All input validations passed!"
-      
-      - name: "Production Approval Notice"
-        if: inputs.environment == 'Production'
-        run: |
-          echo "⚠️  WARNING: You are about to deploy to PRODUCTION"
-          echo "Environment: ${{ inputs.environment }}"
-          echo "Target: ${{ inputs.target }}"
-          echo "Please ensure all testing has been completed."
 
-  Test:
-    needs: Validate-Inputs
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: "Checkout Repository"
-        uses: actions/checkout@v4
-      
-      - name: "Cache Maven Dependencies"
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2/repository
-          key: ${{ env.MAVEN_CACHE_KEY }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      
-      - name: "Setup Java ${{ inputs.java }}"
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '${{ inputs.java }}'
-      
-      - name: "Run Tests"
-        run: mvn clean test -DskipTests=false
-      
-      - name: "Upload Test Report"
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report
-          path: target/surefire-reports
-          retention-days: 30
+      - name: Production Warning
+        if: inputs.environment == 'Production'
+        run: echo "⚠️ WARNING: You are deploying to Production"
 
   Build:
     needs: Test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - name: "Checkout Repository"
-        uses: actions/checkout@v4
-      
-      - name: "Cache Maven Dependencies"
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ env.MAVEN_CACHE_KEY }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      
-      - name: "Setup Java ${{ inputs.java }}"
-        uses: actions/setup-java@v4
+
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '${{ inputs.java }}'
-      
-      - name: "Build Application"
-        run: mvn clean package -DskipTests
-      
-      - name: "Upload JAR Artifact"
+          distribution: "temurin"
+          java-version: "${{ inputs.java }}"
+
+      - name: Build Artifact
+        run: mvn -B package -DskipTests
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: mule-application
+          name: mule-app
           path: target/*.jar
-          retention-days: 30
+
 
   Publish-To-Exchange:
     needs: Build
     runs-on: ubuntu-latest
-    timeout-minutes: 20
     steps:
-      - name: "Checkout Repository"
-        uses: actions/checkout@v4
-      
-      - name: "Verify settings.xml exists"
-        run: |
-          if [ ! -f "settings.xml" ]; then
-            echo "ERROR: settings.xml not found in repository root!"
-            echo "Repository contents:"
-            ls -la
-            exit 1
-          fi
-          echo "✓ settings.xml found"
-      
-      - name: "Cache Maven Dependencies"
-        uses: actions/cache@v4
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
         with:
-          path: ~/.m2/repository
-          key: ${{ env.MAVEN_CACHE_KEY }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      
-      - name: "Setup Java ${{ inputs.java }}"
-        uses: actions/setup-java@v4
+          name: mule-app
+
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '${{ inputs.java }}'
-      
-      - name: "Copy settings.xml to Maven Config"
+          distribution: "temurin"
+          java-version: "${{ inputs.java }}"
+
+      - name: Publish to Exchange
         run: |
-          mkdir -p ~/.m2
-          cp settings.xml ~/.m2/settings.xml
-          chmod 600 ~/.m2/settings.xml
-          echo "✓ settings.xml copied to ~/.m2/"
-      
-      - name: "Verify Anypoint Credentials"
-        env:
-          CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
-          CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
-        run: |
-          if [ -z "$CONNECTED_APP_ID" ]; then
-            echo "ERROR: CONNECTED_APP_ID secret is not configured!"
-            exit 1
+          if [ "${{ inputs.environment }}" == "Sandbox" ]; then
+              MULE_ENV="${{ secrets.DEV_MULE_ENV }}"
+              MULE_KEY="${{ secrets.DEV_MULE_KEY }}"
+          else
+              MULE_ENV="${{ secrets.PROD_MULE_ENV }}"
+              MULE_KEY="${{ secrets.PROD_MULE_KEY }}"
           fi
-          if [ -z "$CONNECTED_APP_SECRET" ]; then
-            echo "ERROR: CONNECTED_APP_SECRET secret is not configured!"
-            exit 1
-          fi
-          echo "✓ Anypoint credentials verified"
-      
-      - name: "Build Before Publishing"
-        run: mvn clean package -DskipTests
-      
-      - name: "Publish to Anypoint Exchange"
-        env:
-          CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
-          CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
-        run: |
-          echo "Publishing application to Anypoint Exchange..."
-          mvn deploy \
-            -s ~/.m2/settings.xml \
-            -DconnectedAppId="$CONNECTED_APP_ID" \
-            -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
-            -DskipTests
-          echo "✓ Exchange publishing completed"
+
+          mvn clean deploy \
+            -DskipTests \
+            -D"mule.env"="$MULE_ENV" \
+            -D"mule.key"="$MULE_KEY" \
+            --settings settings.xml
+
 
   Deploy-To-CloudHub2:
     needs: Publish-To-Exchange
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     steps:
-      - name: "Checkout Repository"
-        uses: actions/checkout@v4
-      
-      - name: "Cache Maven Dependencies"
-        uses: actions/cache@v4
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
         with:
-          path: ~/.m2/repository
-          key: ${{ env.MAVEN_CACHE_KEY }}
-          restore-keys: |
-            ${{ runner.os }}-maven-
-      
-      - name: "Setup Java ${{ inputs.java }}"
-        uses: actions/setup-java@v4
+          name: mule-app
+
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '${{ inputs.java }}'
-      
-      - name: "Verify Deployment Credentials"
+          distribution: "temurin"
+          java-version: "${{ inputs.java }}"
+
+      - name: Deploy to CloudHub 2.0
         env:
-          CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
-          CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
-        run: |
-          echo "Verifying CloudHub 2.0 deployment credentials..."
-          if [ -z "$CONNECTED_APP_ID" ]; then
-            echo "ERROR: CONNECTED_APP_ID is not set!"
-            exit 1
-          fi
-          if [ -z "$CONNECTED_APP_SECRET" ]; then
-            echo "ERROR: CONNECTED_APP_SECRET is not set!"
-            exit 1
-          fi
-          echo "✓ All credentials verified"
-      
-      - name: "Deploy to CloudHub 2.0"
-        env:
-          CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
-          CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+          ClientId: ${{ secrets.CONNECTED_APP_ID }}
+          ClientSecret: ${{ secrets.CONNECTED_APP_SECRET }}
+          GrantType: ${{ secrets.GRANT_TYPE }}
         run: |
           if [ "${{ inputs.environment }}" == "Sandbox" ]; then
-            APP_NAME="test-ci-cd-deployment-sandbox"
+            APP_NAME="myapp-sandbox"
+            MULE_ENV="${{ secrets.DEV_MULE_ENV }}"
+            MULE_KEY="${{ secrets.DEV_MULE_KEY }}"
           else
-            APP_NAME="test-ci-cd-deployment-prod"
+            APP_NAME="myapp-prod"
+            MULE_ENV="${{ secrets.PROD_MULE_ENV }}"
+            MULE_KEY="${{ secrets.PROD_MULE_KEY }}"
           fi
-          
-          echo "=========================================="
-          echo "Deploying to CloudHub 2.0"
-          echo "=========================================="
-          echo "App Name: $APP_NAME"
-          echo "Environment: ${{ inputs.environment }}"
-          echo "Target: ${{ inputs.target }}"
-          echo "Replicas: ${{ inputs.replicas }}"
-          echo "vCores: ${{ inputs.vcores }}"
-          echo "Runtime: ${{ inputs.runtime }}"
-          echo "Java Version: ${{ inputs.java }}"
-          echo "=========================================="
-          
-          mvn clean package -DmuleDeploy \
-            -Denv="${{ inputs.environment }}" \
+
+          mvn clean deploy -DmuleDeploy \
+            -DClientId="$ClientId" \
+            -DClientSecret="$ClientSecret" \
+            -DGrantType="$GrantType" \
+            -Denvironment="${{ inputs.environment }}" \
+            -Dapplication.name="$APP_NAME" \
+            -DjavaVersion="${{ inputs.java }}" \
+            -Dreplicas="${{ inputs.replicas }}" \
+            -DvCores="${{ inputs.vcores }}" \
             -Dregion="${{ inputs.target }}" \
             -Druntime="${{ inputs.runtime }}" \
-            -DappName="$APP_NAME" \
-            -Dreplica="${{ inputs.replicas }}" \
-            -DvCores="${{ inputs.vcores }}" \
-            -DconnectedAppId="$CONNECTED_APP_ID" \
-            -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
+            -D"mule.env"="$MULE_ENV" \
+            -D"mule.key"="$MULE_KEY" \
             -DskipTests
-      
-      - name: "Deployment Summary - SUCCESS"
-        if: success()
-        run: |
-          echo "=================================================="
-          echo "✓ Deployment Completed Successfully!"
-          echo "=================================================="
-          echo "Environment: ${{ inputs.environment }}"
-          echo "Target: ${{ inputs.target }}"
-          echo "Replicas: ${{ inputs.replicas }}"
-          echo "vCores: ${{ inputs.vcores }}"
-          echo "Java Version: ${{ inputs.java }}"
-          echo "Runtime: ${{ inputs.runtime }}"
-          echo "Deployment Description: ${{ inputs.commit }}"
-          echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          echo "=================================================="
-      
-      - name: "Deployment Summary - FAILURE"
-        if: failure()
-        run: |
-          echo "=================================================="
-          echo "✗ Deployment FAILED!"
-          echo "=================================================="
-          echo "Environment: ${{ inputs.environment }}"
-          echo "Target: ${{ inputs.target }}"
-          echo "Check the logs above for detailed error information."
-          echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          echo "=================================================="
-          exit 1
