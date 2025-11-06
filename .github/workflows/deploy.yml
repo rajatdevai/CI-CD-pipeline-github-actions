@@ -202,9 +202,26 @@ jobs:
     
     - name: "Copy settings.xml to Maven Config"
       run: |
+        # Check if settings.xml exists in repository
+        if [ ! -f "settings.xml" ]; then
+          echo "ERROR: settings.xml not found in repository root!"
+          echo "Current directory contents:"
+          ls -la
+          exit 1
+        fi
+        
+        # Validate XML syntax
+        if ! xmllint --noout settings.xml 2>/dev/null; then
+          echo "ERROR: settings.xml has invalid XML syntax!"
+          xmllint --noout settings.xml
+          exit 1
+        fi
+        
         mkdir -p ~/.m2
         cp settings.xml ~/.m2/settings.xml
         echo "✓ settings.xml copied to ~/.m2/"
+        echo "✓ settings.xml contents:"
+        cat ~/.m2/settings.xml
     
     - name: "Verify Anypoint Credentials"
       env:
