@@ -43,8 +43,8 @@
 						<vCores>${vCores}</vCores>
 						
 						<!-- CHANGE 6: ConnectedApp authentication (new) - directly references properties -->
-						<connectedAppClientId>${CONNECTED_APP_ID}</connectedAppClientId>
-						<connectedAppClientSecret>${CONNECTED_APP_SECRET}</connectedAppClientSecret>
+						<connectedAppClientId>${connectedAppId}</connectedAppClientId>
+						<connectedAppClientSecret>${connectedAppSecret}</connectedAppClientSecret>
 						<connectedAppGrantType>client_credentials</connectedAppGrantType>
 					</cloudhub2Deployment>
 				</configuration>
