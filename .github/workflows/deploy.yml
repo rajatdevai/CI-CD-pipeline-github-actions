@@ -41,6 +41,14 @@ on:
           - '8'
           - '17'
         default: '17'
+      runtime:
+        description: "Mule Runtime Version"
+        required: true
+        type: choice
+        options:
+          - '4.9.8'
+          - '4.10.0'
+        default: '4.9.8'
       commit:
         description: "Deployment Description"
         required: true
@@ -48,9 +56,62 @@ on:
 
 run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
 
+env:
+  MAVEN_CACHE_KEY: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+
 jobs:
-  Test:
+  Validate-Inputs:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+    - name: "Validate Deployment Parameters"
+      run: |
+        echo "Validating deployment inputs..."
+        
+        # Validate environment
+        if [[ "${{ inputs.environment }}" != "Sandbox" && "${{ inputs.environment }}" != "Production" ]]; then
+          echo "ERROR: Invalid environment: ${{ inputs.environment }}"
+          exit 1
+        fi
+        
+        # Validate target is not empty
+        if [ -z "${{ inputs.target }}" ]; then
+          echo "ERROR: Target/Space cannot be empty"
+          exit 1
+        fi
+        
+        # Validate replicas
+        if [[ "${{ inputs.replicas }}" != "1" && "${{ inputs.replicas }}" != "2" ]]; then
+          echo "ERROR: Invalid replicas: ${{ inputs.replicas }}"
+          exit 1
+        fi
+        
+        # Validate vCores
+        if [[ ! "${{ inputs.vcores }}" =~ ^(0.1|0.2|1|2)$ ]]; then
+          echo "ERROR: Invalid vCores: ${{ inputs.vcores }}"
+          exit 1
+        fi
+        
+        # Validate Java version
+        if [[ "${{ inputs.java }}" != "8" && "${{ inputs.java }}" != "17" ]]; then
+          echo "ERROR: Invalid Java version: ${{ inputs.java }}"
+          exit 1
+        fi
+        
+        echo "All input validations passed!"
+    
+    - name: "Production Approval Notice"
+      if: inputs.environment == 'Production'
+      run: |
+        echo "⚠️  WARNING: You are about to deploy to PRODUCTION"
+        echo "Environment: ${{ inputs.environment }}"
+        echo "Target: ${{ inputs.target }}"
+        echo "Please ensure all testing has been completed."
+
+  Test:
+    needs: Validate-Inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
     - name: "Checkout Repository"
       uses: actions/checkout@v4
@@ -59,7 +120,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        key: ${{ env.MAVEN_CACHE_KEY }}
         restore-keys: |
           ${{ runner.os }}-maven-
     
@@ -70,8 +131,8 @@ jobs:
         java-version: '${{ inputs.java }}'
     
     - name: "Run Tests"
-      run: mvn clean test -DskipTests=false 2>&1 | grep -E "ERROR|FAILURE|Tests run" || true
-      continue-on-error: true
+      run: mvn clean test -DskipTests=false
+      continue-on-error: false
     
     - name: "Upload Test Report"
       if: always()
@@ -79,11 +140,12 @@ jobs:
       with:
         name: test-report
         path: target/surefire-reports
-        retention-days: 2
+        retention-days: 30
 
   Build:
     needs: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
     - name: "Checkout Repository"
       uses: actions/checkout@v4
@@ -92,7 +154,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        key: ${{ env.MAVEN_CACHE_KEY }}
         restore-keys: |
           ${{ runner.os }}-maven-
     
@@ -103,18 +165,19 @@ jobs:
         java-version: '${{ inputs.java }}'
     
     - name: "Build Application"
-      run: mvn clean package -DskipTests 2>&1 | grep -E "ERROR|FAILURE|BUILD" || true
+      run: mvn clean package -DskipTests
     
     - name: "Upload JAR Artifact"
       uses: actions/upload-artifact@v4
       with:
         name: mule-application
         path: target/*.jar
-        retention-days: 2
+        retention-days: 30
 
   Publish-To-Exchange:
     needs: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
     - name: "Checkout Repository"
       uses: actions/checkout@v4
@@ -123,7 +186,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        key: ${{ env.MAVEN_CACHE_KEY }}
         restore-keys: |
           ${{ runner.os }}-maven-
     
@@ -132,6 +195,31 @@ jobs:
       with:
         distribution: 'temurin'
         java-version: '${{ inputs.java }}'
+        server-id: 'anypoint-exchange'
+        server-username: 'CONNECTED_APP_ID'
+        server-password: 'CONNECTED_APP_SECRET'
+        settings-path: ${{ github.workspace }}
+    
+    - name: "Copy settings.xml to Maven Config"
+      run: |
+        mkdir -p ~/.m2
+        cp settings.xml ~/.m2/settings.xml
+        echo "✓ settings.xml copied to ~/.m2/"
+    
+    - name: "Verify Anypoint Credentials"
+      env:
+        CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
+        CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+      run: |
+        if [ -z "$CONNECTED_APP_ID" ]; then
+          echo "ERROR: CONNECTED_APP_ID secret is not configured!"
+          exit 1
+        fi
+        if [ -z "$CONNECTED_APP_SECRET" ]; then
+          echo "ERROR: CONNECTED_APP_SECRET secret is not configured!"
+          exit 1
+        fi
+        echo "✓ Anypoint credentials verified"
     
     - name: "Build Before Publishing"
       run: mvn clean package -DskipTests
@@ -143,15 +231,16 @@ jobs:
       run: |
         echo "Publishing application to Anypoint Exchange..."
         mvn deploy \
+          --settings ~/.m2/settings.xml \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
-          -DskipTests -q
-        echo "Exchange publishing completed"
-      continue-on-error: true
+          -DskipTests
+        echo "✓ Exchange publishing completed"
 
   Deploy-To-CloudHub2:
     needs: Publish-To-Exchange
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
     - name: "Checkout Repository"
       uses: actions/checkout@v4
@@ -160,7 +249,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.m2/repository
-        key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+        key: ${{ env.MAVEN_CACHE_KEY }}
         restore-keys: |
           ${{ runner.os }}-maven-
     
@@ -170,12 +259,12 @@ jobs:
         distribution: 'temurin'
         java-version: '${{ inputs.java }}'
     
-    - name: "Verify Credentials"
+    - name: "Verify Deployment Credentials"
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
       run: |
-        echo "Verifying credentials..."
+        echo "Verifying CloudHub 2.0 deployment credentials..."
         if [ -z "$CONNECTED_APP_ID" ]; then
           echo "ERROR: CONNECTED_APP_ID is not set!"
           exit 1
@@ -184,55 +273,76 @@ jobs:
           echo "ERROR: CONNECTED_APP_SECRET is not set!"
           exit 1
         fi
-        echo "All credentials are present"
+        echo "✓ All credentials verified"
     
     - name: "Deploy to CloudHub 2.0"
       env:
         CONNECTED_APP_ID: ${{ secrets.CONNECTED_APP_ID }}
         CONNECTED_APP_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
       run: |
-        # Set application name based on environment
         if [ "${{ inputs.environment }}" == "Sandbox" ]; then
           APP_NAME="test-ci-cd-deployment-sandbox"
         else
           APP_NAME="test-ci-cd-deployment-prod"
         fi
         
-        echo "Deploying to CloudHub 2.0..."
+        echo "=========================================="
+        echo "Deploying to CloudHub 2.0"
+        echo "=========================================="
         echo "App Name: $APP_NAME"
         echo "Environment: ${{ inputs.environment }}"
         echo "Target: ${{ inputs.target }}"
         echo "Replicas: ${{ inputs.replicas }}"
         echo "vCores: ${{ inputs.vcores }}"
+        echo "Runtime: ${{ inputs.runtime }}"
+        echo "Java Version: ${{ inputs.java }}"
+        echo "=========================================="
         
-        # CHANGE: Updated to use new POM variable names
         mvn clean package -DmuleDeploy \
           -Denv="${{ inputs.environment }}" \
           -Dregion="${{ inputs.target }}" \
-          -Druntime="4.9.8" \
+          -Druntime="${{ inputs.runtime }}" \
           -DappName="$APP_NAME" \
           -Dreplica="${{ inputs.replicas }}" \
           -DvCores="${{ inputs.vcores }}" \
           -DconnectedAppId="$CONNECTED_APP_ID" \
           -DconnectedAppSecret="$CONNECTED_APP_SECRET" \
-          -DskipTests -q
-    
-    - name: "Deployment Summary"
+          -DskipTests
+
+    - name: "Deployment Summary - SUCCESS"
       if: success()
       run: |
         echo "=================================================="
-        echo "Deployment Completed Successfully!"
+        echo "✓ Deployment Completed Successfully!"
         echo "=================================================="
         echo "Environment: ${{ inputs.environment }}"
         echo "Target: ${{ inputs.target }}"
         echo "Replicas: ${{ inputs.replicas }}"
         echo "vCores: ${{ inputs.vcores }}"
         echo "Java Version: ${{ inputs.java }}"
+        echo "Runtime: ${{ inputs.runtime }}"
+        echo "Deployment Description: ${{ inputs.commit }}"
+        echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
         echo "=================================================="
     
-    - name: "Deployment Failed"
+    - name: "Deployment Summary - FAILURE"
       if: failure()
       run: |
-        echo "Deployment Failed!"
+        echo "=================================================="
+        echo "✗ Deployment FAILED!"
+        echo "=================================================="
+        echo "Environment: ${{ inputs.environment }}"
+        echo "Target: ${{ inputs.target }}"
         echo "Check the logs above for detailed error information."
+        echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+        echo "=================================================="
         exit 1
+    
+    - name: "Notify Deployment Status"
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "✓ Deployment to ${{ inputs.environment }} completed successfully"
+        else
+          echo "✗ Deployment to ${{ inputs.environment }} failed"
+        fi
