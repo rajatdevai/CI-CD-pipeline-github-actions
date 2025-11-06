@@ -53,7 +53,7 @@ on:
 run-name: CH2 Deploy - ${{ inputs.environment }} - ${{ inputs.target }}
 
 env:
-  MAVEN_CACHE: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+  MAVEN_CACHE_KEY: maven-cache-${{ hashFiles('**/pom.xml') }}
 
 jobs:
   validate:
@@ -73,7 +73,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: ${{ env.MAVEN_CACHE }}
+          key: ${{ runner.os }}-maven-${{ env.MAVEN_CACHE_KEY }}
       
       - uses: actions/setup-java@v4
         with:
@@ -97,7 +97,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: ${{ env.MAVEN_CACHE }}
+          key: ${{ runner.os }}-maven-${{ env.MAVEN_CACHE_KEY }}
       
       - uses: actions/setup-java@v4
         with:
@@ -132,7 +132,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.m2/repository
-          key: ${{ env.MAVEN_CACHE }}
+          key: ${{ runner.os }}-maven-${{ env.MAVEN_CACHE_KEY }}
       
       - uses: actions/setup-java@v4
         with:
