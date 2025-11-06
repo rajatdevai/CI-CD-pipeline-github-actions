@@ -10,11 +10,13 @@ on:
         options:
           - Sandbox
           - Production
+
       target:
         description: "CloudHub 2.0 Target/Space"
         required: true
         type: string
         default: "Cloudhub-US-East-2"
+
       replicas:
         description: "Number of Replicas"
         required: true
@@ -22,6 +24,7 @@ on:
         options:
           - "1"
           - "2"
+
       vcores:
         description: "vCores per Replica"
         required: true
@@ -31,6 +34,7 @@ on:
           - "0.2"
           - "1"
           - "2"
+
       java:
         description: "Java Version"
         required: true
@@ -38,6 +42,7 @@ on:
         options:
           - "8"
           - "17"
+
       runtime:
         description: "Mule Runtime Version"
         required: true
@@ -45,6 +50,7 @@ on:
         options:
           - "4.9.8"
           - "4.10.0"
+
       commit:
         description: "Deployment Description"
         required: true
@@ -59,26 +65,29 @@ jobs:
 
   Validate-Inputs:
     runs-on: ubuntu-latest
+
     steps:
       - name: Validate Inputs
         run: |
-          echo "Validating..."
+          echo "Validating environment..."
           if [[ "${{ inputs.environment }}" == "Sandbox" ]]; then
-            echo "Environment OK: Sandbox"
+            echo "✅ Sandbox Environment"
           elif [[ "${{ inputs.environment }}" == "Production" ]]; then
-            echo "Environment OK: Production"
+            echo "✅ Production Environment"
           else
-            echo "Invalid environment"
+            echo "❌ Invalid environment"
             exit 1
           fi
 
       - name: Production Warning
-        if: inputs.environment == 'Production'
-        run: echo "⚠️ WARNING: You are deploying to Production"
+        if: ${{ inputs.environment == 'Production' }}
+        run: echo "⚠️ WARNING: You are deploying to PRODUCTION!"
+
 
   Build:
     needs: Validate-Inputs
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -90,7 +99,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "${{ inputs.java }}"
+          java-version: ${{ inputs.java }}
 
       - name: Build Artifact
         run: mvn -B package -DskipTests
@@ -105,6 +114,7 @@ jobs:
   Publish-To-Exchange:
     needs: Build
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
@@ -115,20 +125,20 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "${{ inputs.java }}"
+          java-version: ${{ inputs.java }}
 
       - name: Publish to Exchange
         run: |
           mvn clean deploy \
             -DskipTests \
-            --settings settings.xml
+            --.settings settings.xml
 
 
   Deploy-To-CloudHub2:
     needs: Publish-To-Exchange
     runs-on: ubuntu-latest
-    steps:
 
+    steps:
       - uses: actions/checkout@v4
 
       - uses: actions/download-artifact@v4
@@ -138,14 +148,17 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "${{ inputs.java }}"
+          java-version: ${{ inputs.java }}
 
       - name: Deploy to CloudHub 2.0
         env:
           ClientId: ${{ secrets.CONNECTED_APP_ID }}
           ClientSecret: ${{ secrets.CONNECTED_APP_SECRET }}
           GrantType: ${{ secrets.GRANT_TYPE }}
+
         run: |
+          echo "Starting deployment..."
+
           if [ "${{ inputs.environment }}" == "Sandbox" ]; then
             APP_NAME="myapp-sandbox"
           else
