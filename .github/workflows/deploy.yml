@@ -50,7 +50,7 @@ on:
         required: true
         type: string
 
-run-name: "CH2 Deploy: ${ { inputs.commit } } | ${ { inputs.environment } } | ${ { inputs.target } }"
+run-name: "CH2 Deploy: ${{ inputs.commit }} | ${{ inputs.environment }} | ${{ inputs.target }}"
 
 env:
   MAVEN_CACHE_KEY: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -77,7 +77,7 @@ jobs:
         run: echo "⚠️ WARNING: You are deploying to Production"
 
   Build:
-    needs: Test
+    needs: Validate-Inputs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -119,18 +119,8 @@ jobs:
 
       - name: Publish to Exchange
         run: |
-          if [ "${{ inputs.environment }}" == "Sandbox" ]; then
-              MULE_ENV="${{ secrets.DEV_MULE_ENV }}"
-              MULE_KEY="${{ secrets.DEV_MULE_KEY }}"
-          else
-              MULE_ENV="${{ secrets.PROD_MULE_ENV }}"
-              MULE_KEY="${{ secrets.PROD_MULE_KEY }}"
-          fi
-
           mvn clean deploy \
             -DskipTests \
-            -D"mule.env"="$MULE_ENV" \
-            -D"mule.key"="$MULE_KEY" \
             --settings settings.xml
 
 
@@ -158,12 +148,8 @@ jobs:
         run: |
           if [ "${{ inputs.environment }}" == "Sandbox" ]; then
             APP_NAME="myapp-sandbox"
-            MULE_ENV="${{ secrets.DEV_MULE_ENV }}"
-            MULE_KEY="${{ secrets.DEV_MULE_KEY }}"
           else
             APP_NAME="myapp-prod"
-            MULE_ENV="${{ secrets.PROD_MULE_ENV }}"
-            MULE_KEY="${{ secrets.PROD_MULE_KEY }}"
           fi
 
           mvn clean deploy -DmuleDeploy \
@@ -177,6 +163,4 @@ jobs:
             -DvCores="${{ inputs.vcores }}" \
             -Dregion="${{ inputs.target }}" \
             -Druntime="${{ inputs.runtime }}" \
-            -D"mule.env"="$MULE_ENV" \
-            -D"mule.key"="$MULE_KEY" \
             -DskipTests
