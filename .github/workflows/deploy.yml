@@ -65,6 +65,7 @@ jobs:
 
   Validate-Inputs:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Validate Inputs
@@ -80,23 +81,29 @@ jobs:
           fi
 
       - name: Production Warning
-        if: ${{ inputs.environment == 'Production' }}
+        if: inputs.environment == 'Production'
         run: echo "⚠️ WARNING: You are deploying to PRODUCTION!"
 
 
   Build:
     needs: Validate-Inputs
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - uses: actions/cache@v4
+      - name: Cache Maven Dependencies
+        uses: actions/cache@v4
         with:
           path: ~/.m2/repository
           key: ${{ env.MAVEN_CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: ${{ inputs.java }}
@@ -109,53 +116,118 @@ jobs:
         with:
           name: mule-app
           path: target/*.jar
+          retention-days: 5
 
 
   Publish-To-Exchange:
     needs: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: Cache Maven Dependencies
+        uses: actions/cache@v4
         with:
-          name: mule-app
+          path: ~/.m2/repository
+          key: ${{ env.MAVEN_CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: ${{ inputs.java }}
 
-      - name: Publish to Exchange
+      - name: Verify settings.xml exists
         run: |
-          mvn clean deploy \
-            -DskipTests \
-            --.settings settings.xml
+          if [ ! -f "settings.xml" ]; then
+            echo "ERROR: settings.xml not found in repository root!"
+            ls -la
+            exit 1
+          fi
+          echo "✓ settings.xml found"
+
+      - name: Copy settings.xml to Maven Config
+        run: |
+          mkdir -p ~/.m2
+          cp settings.xml ~/.m2/settings.xml
+          chmod 600 ~/.m2/settings.xml
+          echo "✓ settings.xml copied to ~/.m2/"
+
+      - name: Verify Anypoint Credentials
+        env:
+          CLIENT_ID: ${{ secrets.CONNECTED_APP_ID }}
+          CLIENT_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+        run: |
+          if [ -z "$CLIENT_ID" ]; then
+            echo "ERROR: CONNECTED_APP_ID secret is not configured!"
+            exit 1
+          fi
+          if [ -z "$CLIENT_SECRET" ]; then
+            echo "ERROR: CONNECTED_APP_SECRET secret is not configured!"
+            exit 1
+          fi
+          echo "✓ Anypoint credentials verified"
+
+      - name: Publish to Anypoint Exchange
+        env:
+          CLIENT_ID: ${{ secrets.CONNECTED_APP_ID }}
+          CLIENT_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+        run: |
+          echo "Publishing application to Anypoint Exchange..."
+          mvn deploy \
+            -s ~/.m2/settings.xml \
+            -DskipTests
+          echo "✓ Exchange publishing completed"
 
 
   Deploy-To-CloudHub2:
     needs: Publish-To-Exchange
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - uses: actions/download-artifact@v4
+      - name: Cache Maven Dependencies
+        uses: actions/cache@v4
         with:
-          name: mule-app
+          path: ~/.m2/repository
+          key: ${{ env.MAVEN_CACHE_KEY }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
 
-      - uses: actions/setup-java@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
           distribution: "temurin"
           java-version: ${{ inputs.java }}
 
+      - name: Verify CloudHub Credentials
+        env:
+          CLIENT_ID: ${{ secrets.CONNECTED_APP_ID }}
+          CLIENT_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+        run: |
+          echo "Verifying CloudHub 2.0 deployment credentials..."
+          if [ -z "$CLIENT_ID" ]; then
+            echo "ERROR: CONNECTED_APP_ID is not set!"
+            exit 1
+          fi
+          if [ -z "$CLIENT_SECRET" ]; then
+            echo "ERROR: CONNECTED_APP_SECRET is not set!"
+            exit 1
+          fi
+          echo "✓ All credentials verified"
+
       - name: Deploy to CloudHub 2.0
         env:
-          ClientId: ${{ secrets.CONNECTED_APP_ID }}
-          ClientSecret: ${{ secrets.CONNECTED_APP_SECRET }}
-          GrantType: ${{ secrets.GRANT_TYPE }}
-
+          CLIENT_ID: ${{ secrets.CONNECTED_APP_ID }}
+          CLIENT_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
         run: |
           echo "Starting deployment..."
 
@@ -165,10 +237,21 @@ jobs:
             APP_NAME="myapp-prod"
           fi
 
+          echo "=========================================="
+          echo "Deploying to CloudHub 2.0"
+          echo "=========================================="
+          echo "App Name: $APP_NAME"
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Region: ${{ inputs.target }}"
+          echo "Replicas: ${{ inputs.replicas }}"
+          echo "vCores: ${{ inputs.vcores }}"
+          echo "Runtime: ${{ inputs.runtime }}"
+          echo "Java Version: ${{ inputs.java }}"
+          echo "=========================================="
+
           mvn clean deploy -DmuleDeploy \
-            -DClientId="$ClientId" \
-            -DClientSecret="$ClientSecret" \
-            -DGrantType="$GrantType" \
+            -DClientId="$CLIENT_ID" \
+            -DClientSecret="$CLIENT_SECRET" \
             -Denvironment="${{ inputs.environment }}" \
             -Dapplication.name="$APP_NAME" \
             -DjavaVersion="${{ inputs.java }}" \
@@ -177,3 +260,30 @@ jobs:
             -Dregion="${{ inputs.target }}" \
             -Druntime="${{ inputs.runtime }}" \
             -DskipTests
+
+      - name: Deployment Summary - SUCCESS
+        if: success()
+        run: |
+          echo "=================================================="
+          echo "✓ Deployment Completed Successfully!"
+          echo "=================================================="
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Target: ${{ inputs.target }}"
+          echo "Replicas: ${{ inputs.replicas }}"
+          echo "vCores: ${{ inputs.vcores }}"
+          echo "Runtime: ${{ inputs.runtime }}"
+          echo "Java Version: ${{ inputs.java }}"
+          echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          echo "=================================================="
+
+      - name: Deployment Summary - FAILURE
+        if: failure()
+        run: |
+          echo "=================================================="
+          echo "✗ Deployment FAILED!"
+          echo "=================================================="
+          echo "Environment: ${{ inputs.environment }}"
+          echo "Target: ${{ inputs.target }}"
+          echo "Check the logs above for detailed error information."
+          echo "Timestamp: $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          echo "=================================================="
