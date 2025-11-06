@@ -152,6 +152,7 @@ jobs:
         env:
           CLIENT_ID: ${{ secrets.CONNECTED_APP_ID }}
           CLIENT_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
+          GRANT_TYPE: client_credentials
         run: |
           echo "Deploying: ${{ steps.app-name.outputs.name }}"
           echo "Environment: ${{ inputs.environment }}"
@@ -160,6 +161,7 @@ jobs:
           mvn clean deploy -DmuleDeploy \
             -DClientId="$CLIENT_ID" \
             -DClientSecret="$CLIENT_SECRET" \
+            -DGrantType="$GRANT_TYPE" \
             -Denvironment="${{ inputs.environment }}" \
             -Dapplication.name="${{ steps.app-name.outputs.name }}" \
             -DjavaVersion="${{ inputs.java }}" \
