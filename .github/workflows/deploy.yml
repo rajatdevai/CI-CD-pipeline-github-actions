@@ -143,7 +143,7 @@ jobs:
         id: app-name
         run: |
           if [ "${{ inputs.environment }}" == "Sandbox" ]; then
-            echo "name=myapp-sandbox" >> $GITHUB_OUTPUT
+            echo "name=test-ci-cd-deployment-app-sandbox" >> $GITHUB_OUTPUT
           else
             echo "name=myapp-prod" >> $GITHUB_OUTPUT
           fi
@@ -173,8 +173,8 @@ jobs:
       
       - name: Success Message
         if: success()
-        run: echo "✓ Deployment successful to ${{ inputs.environment }}"
+        run: echo " Deployment successful to ${{ inputs.environment }}"
       
       - name: Failure Message
         if: failure()
-        run: echo "✗ Deployment failed"
+        run: echo " Deployment failed"
