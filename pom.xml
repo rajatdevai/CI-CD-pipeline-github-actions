@@ -6,11 +6,11 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>c0b139e1-50e3-440a-af61-f78695141ed5</groupId>
-    <artifactId>test-ci-cd-deployment</artifactId>
+    <artifactId>cc-test-ci-cd-deployment</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>mule-application</packaging>
 
-    <name>test-ci-cd-deployment</name>
+    <name>cc-test-ci-cd-deployment</name>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
