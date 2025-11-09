@@ -10,14 +10,14 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 	</http:listener-config>
 	<flow name="test-ci-cd-deploymentFlow" doc:id="f19b521c-f60b-4399-9672-7e652f02adef" >
 		<http:listener doc:name="Listener" doc:id="8ca11663-2f24-4bae-a4c1-0e084900d6cd" config-ref="HTTP_Listener_config" path="ci-cd"/>
-		<logger level="INFO" doc:name="START" doc:id="b3b3913c-0f38-423f-b9ec-9cd5a698357a" message='"Execution started"'/>
+		<logger level="INFO" doc:name="START" doc:id="b3b3913c-0f38-423f-b9ec-9cd5a698357a" message='"Execution started successfully"'/>
 		<ee:transform doc:name="Main Payload" doc:id="a0ec45a8-5531-42ce-b66b-87c4021891d6">
 			<ee:message>
 				<ee:set-payload><![CDATA[%dw 2.0
 output application/json
 ---
 {
-	message: "CI/CD deployment successful! ",
+	message: "CI/CD deployment successfully! ",
 	timestamp: now(),
 	environment: "sandbox",
 	version: "1.0.0"
