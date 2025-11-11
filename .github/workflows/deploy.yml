@@ -182,7 +182,7 @@
 name: Deploy to CloudHub 2.0 (Manual + Automatic)
 
 on:
-  # TRIGGER 1: MANUAL (Your current setup)
+  # TRIGGER 1: MANUAL 
   workflow_dispatch:
     inputs:
       environment:
@@ -235,16 +235,15 @@ on:
   # TRIGGER 2: AUTOMATIC ON CODE PUSH
   push:
     branches:
-      - main                    # Only main branch
+      - main                   
     paths:
-      - 'src/**'                # Only if src files change
-      - 'pom.xml'               # Only if pom.xml changes
-      - 'settings.xml'          # Only if settings change
+      - 'src/**'                
+      - 'pom.xml'               
+      - 'settings.xml'          
 
   # TRIGGER 3: SCHEDULED (10 PM DAILY)
   schedule:
-    # Minute Hour Day Month DayOfWeek
-    # 0     22   *   *      *
+
     - cron: '0 22 * * *'        # 10 PM UTC every day
 
 run-name: |
@@ -340,9 +339,9 @@ jobs:
       - name: Verify Settings.xml
         run: |
           if [ -f "settings.xml" ]; then
-            echo "✅ settings.xml found"
+            echo " settings.xml found"
           else
-            echo "⚠️  settings.xml not found"
+            echo " settings.xml not found"
             exit 1
           fi
 
@@ -351,9 +350,9 @@ jobs:
           CLIENT_ID: ${{ secrets.CONNECTED_APP_ID }}
           CLIENT_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
         run: |
-          echo "📦 Publishing to Anypoint Exchange..."
+          echo " Publishing to Anypoint Exchange..."
           mvn deploy -s settings.xml -DskipTests
-          echo "✅ Published to Exchange"
+          echo " Published to Exchange"
 
   deploy:
     needs: publish
@@ -394,7 +393,7 @@ jobs:
           CLIENT_SECRET: ${{ secrets.CONNECTED_APP_SECRET }}
           GRANT_TYPE: client_credentials
         run: |
-          echo "🚀 Deploying to CloudHub 2.0..."
+          echo " Deploying to CloudHub 2.0..."
           echo "Environment: ${{ env.DEPLOY_ENV }}"
           echo "Target: ${{ env.DEPLOY_TARGET }}"
           echo "Replicas: ${{ env.DEPLOY_REPLICAS }}"
@@ -415,7 +414,7 @@ jobs:
       - name: Deployment Success
         if: success()
         run: |
-          echo "✅ Successfully deployed to ${{ env.DEPLOY_ENV }}"
+          echo "  Successfully deployed to ${{ env.DEPLOY_ENV }}"
           echo "   App Name: ${{ steps.app-name.outputs.name }}"
           echo "   Region: ${{ env.DEPLOY_TARGET }}"
           echo "   Replicas: ${{ env.DEPLOY_REPLICAS }}"
@@ -423,5 +422,5 @@ jobs:
       - name: Deployment Failure
         if: failure()
         run: |
-          echo "❌ Deployment failed!"
+          echo " Deployment failed!"
           echo "   Please check logs above for details"
